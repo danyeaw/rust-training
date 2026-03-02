@@ -7,7 +7,7 @@
 // 3. EXTRA: try changing the type from i32 into String everywhere; does your program still compile? What changes are necessary?
 
 /// Merge two array slices (that have to be sorted) into a vector
-fn merge(a: &[i32], b: &[i32]) -> Vec<i32> {
+fn merge(a: &[String], b: &[String]) -> Vec<String> {
     let mut dest = Vec::new();
 
     let mut a_idx = 0;
@@ -15,26 +15,26 @@ fn merge(a: &[i32], b: &[i32]) -> Vec<i32> {
 
     while a_idx < a.len() && b_idx < b.len() {
         if a[a_idx] <= b[b_idx] {
-            dest.push(a[a_idx]);
+            dest.push(a[a_idx].clone());
             a_idx += 1
         } else {
-            dest.push(b[b_idx]);
+            dest.push(b[b_idx].clone());
             b_idx += 1
         }
     }
 
     for elem in &a[a_idx..] {
-        dest.push(*elem)
+        dest.push(elem.clone())
     }
     for elem in &b[b_idx..] {
-        dest.push(*elem)
+        dest.push(elem.clone())
     }
 
     dest
 }
 
 /// Take an array slice, and sort into a freshly constructed vector using the above function
-fn merge_sort(data: &[i32]) -> Vec<i32> {
+fn merge_sort(data: &[String]) -> Vec<String> {
     if data.len() > 1 {
         let mid = data.len() / 2;
         let first_half = &data[..mid];
@@ -46,7 +46,7 @@ fn merge_sort(data: &[i32]) -> Vec<i32> {
 }
 
 /// Read a bunch of numbers from standard input into a Vec<i32>.
-fn read_numbers() -> Vec<i32> {
+fn read_numbers() -> Vec<String> {
     use std::io;
     let mut result = Vec::new();
     for line in io::stdin().lines().flatten() {
@@ -77,14 +77,15 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_sort() {
-        assert_eq!(merge_sort(&[]), vec![]);
-        assert_eq!(merge_sort(&[5]), vec![5]);
-        assert_eq!(merge_sort(&[1, 2, 3]), vec![1, 2, 3]);
-        assert_eq!(merge_sort(&[47, 42, 5, 1]), vec![1, 5, 42, 47]);
+    fn test_sort_strings() {
         assert_eq!(
-            merge_sort(&[6, 47, 42, 5, 1, 123]),
-            vec![1, 5, 6, 42, 47, 123]
+            merge_sort(&["cherry".to_string(), "apple".to_string(), "banana".to_string()]),
+            vec!["apple".to_string(), "banana".to_string(), "cherry".to_string()]
+        );
+
+        assert_eq!(
+            merge_sort(&["5".to_string(), "47".to_string(), "100".to_string()]),
+            vec!["100".to_string(), "47".to_string(), "5".to_string()]
         );
     }
 }
