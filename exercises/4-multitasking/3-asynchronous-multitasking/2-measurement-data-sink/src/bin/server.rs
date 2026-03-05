@@ -1,11 +1,7 @@
-// use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-// use tokio::net::{TcpListener, TcpStream};
-// use tokio::sync::mpsc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 use std::collections::BTreeMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
@@ -14,7 +10,8 @@ use tracing_subscriber::EnvFilter;
 
 use data_sink::{KeepAlive, Measurement};
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     // Setup logging
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
@@ -23,20 +20,20 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
     // Setup backend
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || database(receiver)); // TODO: Change to tokio::task
+    let (sender, receiver) = mpsc::channel(16);
+    tokio::task::spawn(database(receiver)); // TODO: Change to tokio::task
 
-    let listener = TcpListener::bind("[::1]:8080")?;
+    let listener = TcpListener::bind("[::1]:8080").await?;
 
     loop {
-        let (socket, _) = listener.accept()?;
+        let (socket, _) = listener.accept().await?;
         let sender = sender.clone();
-        std::thread::spawn(move || handle_client(socket, sender)); // TODO: Change to tokio::task
+        tokio::task::spawn(handle_client(socket, sender)); // TODO: Change to tokio::task
     }
 }
 
 // TODO: make this an async fn
-pub fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> anyhow::Result<()> {
+pub async fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> anyhow::Result<()> {
     tracing::info!("New connection");
 
     let mut buffered = BufReader::new(socket);
@@ -44,7 +41,7 @@ pub fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> a
     loop {
         let mut line = String::new();
 
-        buffered.read_line(&mut line)?;
+        buffered.read_line(&mut line).await?;
 
         // Make sure the sensor knows everything is still ok...
         // Since the sensor sends a new measurement every second, and we only have to send a
@@ -54,12 +51,12 @@ pub fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> a
         };
         let mut json = serde_json::to_string(&msg)?;
         json.push('\n');
-        buffered.get_mut().write_all(json.as_bytes())?;
+        buffered.get_mut().write_all(json.as_bytes()).await?;
 
         match serde_json::from_str::<Measurement>(&line) {
             Ok(parsed) => {
                 tracing::debug!(node_id = parsed.node_id, "Received measurement");
-                backend.send(parsed)?;
+                backend.send(parsed).await?;
             }
             Err(err) => tracing::error!(?err, line, "Failed to deserialize"),
         }
@@ -68,12 +65,12 @@ pub fn handle_client(socket: TcpStream, backend: mpsc::Sender<Measurement>) -> a
 
 // TODO: make this an async fn
 #[tracing::instrument(skip_all)]
-pub fn database(receiver: Receiver<Measurement>) -> anyhow::Result<()> {
+pub async fn database(mut receiver: mpsc::Receiver<Measurement>) -> anyhow::Result<()> {
     let mut database = csv::Writer::from_path("database.csv")?;
 
     loop {
         // Accumulate data for one minute
-        std::thread::sleep(Duration::from_secs(60));
+        tokio::time::sleep(Duration::from_secs(60)).await;
 
         // Now accumulate data from the last minute
         let now = SystemTime::now();
